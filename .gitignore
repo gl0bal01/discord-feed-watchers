@@ -1,0 +1,33 @@
+# Local secrets
+src/config/config.php
+.env
+.env.*
+!.env.example
+
+# Runtime data / state files
+uids
+cve/processed_cves.txt
+europol/processed_europol_wanted.txt
+europol/entities.ftm.json
+fbi/uids
+fbi/processed_fbi_uids.txt
+ransomware/processed_ransomware_victims.txt
+ransomware/recentvictims.json
+
+# Logs
+*.log
+logs/
+cve/logs/
+europol/logs/
+fbi/logs/
+ransomware/logs/
+fun/logs/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Agent/tooling state
+.omc/

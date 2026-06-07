@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "Discord Feed Watchers"
+type: "software"
+abstract: "Stay Ahead of Threats — Get Real-Time Ransomware, CVE, FBI & Europol Alerts in Your Discord Server."
+keywords: 
+  - "Discord"
+  - "Feed Watcher"
+  - "Ransomware"
+  - "CVE"
+  - "FBI"
+  - "Europol"
+authors:
+  - family-names: "gl0bal01"
+    alias: "gl0bal01"
+    orcid: "https://orcid.org/0009-0003-0062-4876"
+repository-code: "https://github.com/gl0bal01/discord-feed-watchers"
+url: "https://github.com/gl0bal01/discord-feed-watchers"
+license: "MIT"
+version: "v1.0.0"
+date-released: 2025-07-01
+doi: "10.5281/zenodo.15784648"

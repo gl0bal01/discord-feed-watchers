@@ -1,0 +1,22 @@
+{
+    "name": "gl0bal01/discord-feed-watchers",
+    "description": "Discord webhook watchers for CVE, FBI Most Wanted, Europol Most Wanted, and Ransomware feeds",
+    "type": "project",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*"
+    },
+    "require-dev": {},
+    "autoload": {
+        "classmap": [
+            "src/lib/"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
