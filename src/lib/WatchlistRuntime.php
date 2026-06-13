@@ -11,6 +11,12 @@ final class WatchlistRuntime
     /** Discord hard limit on the `content` field of a webhook message. */
     public const DISCORD_CONTENT_LIMIT = 2000;
 
+    /** Maximum characters rendered for a single free-text section (e.g. description). */
+    public const DISCORD_SECTION_LIMIT = 500;
+
+    /** Maximum number of links rendered in a single link list. */
+    public const MAX_LINKS_PER_SECTION = 5;
+
     /** @var resource[] */
     private static array $heldLocks = [];
 
@@ -162,6 +168,149 @@ final class WatchlistRuntime
 
         $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
         if ($scheme !== 'https') {
+            return '';
+        }
+
+        return $url;
+    }
+
+    /**
+     * Escape Discord markdown control characters in feed-supplied text so values
+     * containing *, _, ~, |, ` or \ cannot corrupt message formatting.
+     */
+    public static function escapeMarkdown(string $value): string
+    {
+        return addcslashes($value, '\\*_~|`');
+    }
+
+    /**
+     * Truncate then markdown-escape a free-text block for a content message.
+     * Returns '' for empty input (so callers can skip the section).
+     */
+    public static function formatBlock(string $value, int $limit = self::DISCORD_SECTION_LIMIT): string
+    {
+        if (trim($value) === '') {
+            return '';
+        }
+
+        return self::escapeMarkdown(self::truncate($value, $limit));
+    }
+
+    /**
+     * Append a "**Label**: value" line, skipping empty or "N/A" values and
+     * escaping markdown in the value.
+     *
+     * @param array<int, string> $lines
+     */
+    public static function appendField(array &$lines, string $label, string $value, ?int $limit = null): void
+    {
+        $value = trim($value);
+        $upper = strtoupper($value);
+        if ($value === '' || $upper === 'N/A' || $upper === 'NA') {
+            return;
+        }
+
+        if ($limit !== null) {
+            $value = self::truncate($value, $limit);
+        }
+
+        $lines[] = '**' . $label . '**: ' . self::escapeMarkdown($value);
+    }
+
+    /**
+     * Validate a URL and, if usable, append a single "**Label**: <url>" line with
+     * link-preview suppression. A literal '>' would break the suppression, so such
+     * URLs are dropped.
+     *
+     * @param array<int, string> $lines
+     */
+    public static function appendLink(array &$lines, string $label, string $url, bool $httpsOnly = false): void
+    {
+        $url = self::sanitizeLinkUrl($url, $httpsOnly);
+        if ($url === '') {
+            return;
+        }
+
+        $lines[] = '**' . $label . '**: <' . $url . '>';
+    }
+
+    /**
+     * Append a bold-labeled list of preview-suppressed links, each validated and the
+     * list capped at MAX_LINKS_PER_SECTION. Emits nothing when no URL survives.
+     *
+     * @param array<int, string> $lines
+     * @param array<int, mixed> $urls
+     */
+    public static function appendLinkList(array &$lines, string $label, array $urls, bool $httpsOnly = false): void
+    {
+        $rendered = [];
+        foreach ($urls as $url) {
+            $clean = self::sanitizeLinkUrl((string) $url, $httpsOnly);
+            if ($clean === '') {
+                continue;
+            }
+
+            $rendered[] = '- <' . $clean . '>';
+            if (count($rendered) >= self::MAX_LINKS_PER_SECTION) {
+                break;
+            }
+        }
+
+        if ($rendered === []) {
+            return;
+        }
+
+        $lines[] = '';
+        $lines[] = '**' . $label . '**:';
+        foreach ($rendered as $line) {
+            $lines[] = $line;
+        }
+    }
+
+    /**
+     * Join content lines, append an italic UTC footer, and truncate to the Discord
+     * content limit. Centralizes the message envelope shared by every notifier.
+     *
+     * @param array<int, string> $lines
+     */
+    public static function finalizeContent(array $lines, string $footerLabel): string
+    {
+        $lines[] = '';
+        $lines[] = '_' . $footerLabel . ' — ' . gmdate('Y-m-d H:i:s') . ' UTC_';
+
+        return self::truncate(implode("\n", $lines), self::DISCORD_CONTENT_LIMIT);
+    }
+
+    /**
+     * Severity → colored-circle emoji for notification headers. Empty string when
+     * the severity is unknown.
+     */
+    public static function severityEmoji(string $severity): string
+    {
+        return ['CRITICAL' => '🔴', 'HIGH' => '🟠', 'MEDIUM' => '🟡', 'LOW' => '🟢'][strtoupper(trim($severity))] ?? '';
+    }
+
+    /**
+     * Build a "{emoji} **title**" header line, escaping the title and avoiding a
+     * leading space when no emoji is supplied.
+     */
+    public static function headerLine(string $emoji, string $title): string
+    {
+        $prefix = $emoji !== '' ? $emoji . ' ' : '';
+
+        return $prefix . '**' . self::escapeMarkdown($title) . '**';
+    }
+
+    /** Validate a URL for use inside angle-bracket link suppression; '' if unusable. */
+    private static function sanitizeLinkUrl(string $url, bool $httpsOnly): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        $url = $httpsOnly ? self::filterHttpsUrl($url) : (filter_var($url, FILTER_VALIDATE_URL) ? $url : '');
+        if ($url === '' || str_contains($url, '>')) {
             return '';
         }
 

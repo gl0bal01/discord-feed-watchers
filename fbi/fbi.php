@@ -56,10 +56,10 @@ final class FBIWantedNotifier
      */
     private function buildContentMessage(array $item): string
     {
-        $title = trim((string) ($item['title'] ?? 'Unknown'));
+        $title = $this->valueAsString($item['title'] ?? '') ?: 'Unknown';
         $lines = [
             '==============================',
-            '# ' . ($title !== '' ? $title : 'Unknown'),
+            '# ' . WatchlistRuntime::escapeMarkdown($title),
             '==============================',
             '',
         ];
@@ -76,16 +76,10 @@ final class FBIWantedNotifier
         ];
 
         foreach ($fieldsToCheck as $key => $label) {
-            $value = $this->valueAsString($item[$key] ?? '');
-            if ($value !== '' && strtolower($value) !== 'na') {
-                $lines[] = sprintf('**%s**: %s', $label, $value);
-            }
+            WatchlistRuntime::appendField($lines, $label, $this->valueAsString($item[$key] ?? ''));
         }
 
-        $birthDates = $this->valueAsString($item['dates_of_birth_used'] ?? []);
-        if ($birthDates !== '') {
-            $lines[] = '**Date(s) of Birth Used**: ' . $birthDates;
-        }
+        WatchlistRuntime::appendField($lines, 'Date(s) of Birth Used', $this->valueAsString($item['dates_of_birth_used'] ?? []));
 
         $age = $this->calculateAge($item);
         if ($age !== null) {
@@ -101,10 +95,7 @@ final class FBIWantedNotifier
         ];
 
         foreach ($optionalFields as $key => $label) {
-            $value = $this->valueAsString($item[$key] ?? '');
-            if ($value !== '') {
-                $lines[] = sprintf('**%s**: %s', $label, $value);
-            }
+            WatchlistRuntime::appendField($lines, $label, $this->valueAsString($item[$key] ?? ''));
         }
 
         $heightMin = $this->valueAsString($item['height_min'] ?? '');
@@ -130,60 +121,49 @@ final class FBIWantedNotifier
         ];
 
         foreach ($arrayFields as $key => $label) {
-            $value = $this->valueAsString($item[$key] ?? []);
-            if ($value !== '') {
-                $lines[] = sprintf('**%s**: %s', $label, $value);
-            }
+            WatchlistRuntime::appendField($lines, $label, $this->valueAsString($item[$key] ?? []));
         }
 
         $rewardText = $this->valueAsString($item['reward_text'] ?? '');
         if ($rewardText !== '') {
             $lines[] = '';
-            $lines[] = '**Reward**: ' . $rewardText;
+            WatchlistRuntime::appendField($lines, 'Reward', $rewardText, WatchlistRuntime::DISCORD_SECTION_LIMIT);
         } elseif (is_numeric($item['reward_min'] ?? null) && (float) $item['reward_min'] > 0) {
             $lines[] = '**Reward**: $' . number_format((float) $item['reward_min'], 2, '.', ',');
         }
 
         foreach (['description', 'caution', 'remarks', 'details', 'warning_message', 'publication_remarks'] as $key) {
-            $value = $this->valueAsString($item[$key] ?? '');
-            if ($value === '') {
+            $block = WatchlistRuntime::formatBlock($this->valueAsString($item[$key] ?? ''));
+            if ($block === '') {
                 continue;
             }
 
-            $label = ucwords(str_replace('_', ' ', $key));
             $lines[] = '';
-            $lines[] = sprintf('**%s**: %s', $label, WatchlistRuntime::truncate($value, 350));
+            $lines[] = sprintf('**%s**: %s', ucwords(str_replace('_', ' ', $key)), $block);
         }
 
-        $moreInfoUrl = $this->valueAsString($item['url'] ?? '');
-        if ($moreInfoUrl !== '' && filter_var($moreInfoUrl, FILTER_VALIDATE_URL)) {
-            $lines[] = '**More Info**: <' . $moreInfoUrl . '>';
+        WatchlistRuntime::appendLink($lines, 'More Info', $this->valueAsString($item['url'] ?? ''));
+
+        // Detail page link from the FBI feed's path (distinct from `url`).
+        $path = trim((string) ($item['path'] ?? ''));
+        if ($path !== '') {
+            $fullPath = 'https://www.fbi.gov' . (str_starts_with($path, '/') ? $path : '/' . $path);
+            WatchlistRuntime::appendLink($lines, 'All Details', $fullPath);
         }
 
         $files = $item['files'] ?? [];
-        if (is_array($files) && $files !== []) {
+        if (is_array($files)) {
             $fileUrls = [];
             foreach ($files as $file) {
-                if (!is_array($file)) {
-                    continue;
-                }
-
-                $fileUrl = trim((string) ($file['url'] ?? ''));
-                if ($fileUrl !== '' && filter_var($fileUrl, FILTER_VALIDATE_URL)) {
-                    $fileUrls[] = '- <' . $fileUrl . '>';
+                if (is_array($file)) {
+                    $fileUrls[] = $file['url'] ?? '';
                 }
             }
 
-            if ($fileUrls !== []) {
-                $lines[] = '';
-                $lines[] = '**File(s)**:';
-                foreach ($fileUrls as $fileUrlLine) {
-                    $lines[] = $fileUrlLine;
-                }
-            }
+            WatchlistRuntime::appendLinkList($lines, 'File(s)', $fileUrls);
         }
 
-        return WatchlistRuntime::truncate(implode("\n", $lines), WatchlistRuntime::DISCORD_CONTENT_LIMIT);
+        return WatchlistRuntime::finalizeContent($lines, 'FBI Wanted Notification');
     }
 
     /**
@@ -204,6 +184,10 @@ final class FBIWantedNotifier
         try {
             $birthDate = new DateTimeImmutable($candidate);
             $today = new DateTimeImmutable('now');
+            if ($birthDate > $today) {
+                return null;
+            }
+
             return $today->diff($birthDate)->y;
         } catch (Throwable $exception) {
             return null;

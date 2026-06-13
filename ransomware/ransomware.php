@@ -119,7 +119,7 @@ final class RansomwareVictimNotifier
         $highlightTag = ($country === $this->highlightCountry) ? '🟠' : '🔴';
 
         $lines = [];
-        $lines[] = "{$highlightTag} **{$title}**";
+        $lines[] = WatchlistRuntime::headerLine($highlightTag, $title);
         $lines[] = '';
 
         $simpleFields = [
@@ -132,30 +132,18 @@ final class RansomwareVictimNotifier
         ];
 
         foreach ($simpleFields as $key => $label) {
-            $value = $getValue($victim, $key);
-            if ($value !== '' && strtoupper($value) !== 'N/A') {
-                $lines[] = "**{$label}**: {$value}";
-            }
+            WatchlistRuntime::appendField($lines, $label, $getValue($victim, $key));
         }
 
-        $description = $getValue($victim, 'description');
-        if ($description !== '') {
+        $descBlock = WatchlistRuntime::formatBlock($getValue($victim, 'description'));
+        if ($descBlock !== '') {
             $lines[] = '';
-            $lines[] = WatchlistRuntime::truncate($description, 500);
+            $lines[] = $descBlock;
         }
 
-        // Post URL as clickable link
-        $postUrl = $getValue($victim, 'post_url');
-        if ($postUrl !== '' && filter_var($postUrl, FILTER_VALIDATE_URL)) {
-            $lines[] = '';
-            $lines[] = "**Post**: <{$postUrl}>";
-        }
-
-        // Screenshot as clickable link
-        $screenshotUrl = WatchlistRuntime::filterHttpsUrl($getValue($victim, 'screenshot'));
-        if ($screenshotUrl !== '') {
-            $lines[] = "**Screenshot**: <{$screenshotUrl}>";
-        }
+        $lines[] = '';
+        WatchlistRuntime::appendLink($lines, 'Post', $getValue($victim, 'post_url'));
+        WatchlistRuntime::appendLink($lines, 'Screenshot', $getValue($victim, 'screenshot'), true);
 
         // Infostealer data
         $infostealer = $victim['infostealer'] ?? null;
@@ -170,13 +158,10 @@ final class RansomwareVictimNotifier
             );
         } elseif (is_string($infostealer) && trim($infostealer) !== '') {
             $lines[] = '';
-            $lines[] = '**Infostealer**: ' . trim($infostealer);
+            WatchlistRuntime::appendField($lines, 'Infostealer', $infostealer);
         }
 
-        $lines[] = '';
-        $lines[] = '_Ransomware Notification — ' . gmdate('Y-m-d H:i:s') . ' UTC_';
-
-        return WatchlistRuntime::truncate(implode("\n", $lines), WatchlistRuntime::DISCORD_CONTENT_LIMIT);
+        return WatchlistRuntime::finalizeContent($lines, 'Ransomware Notification');
     }
 }
 

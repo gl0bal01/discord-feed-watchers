@@ -108,7 +108,7 @@ final class EuropolMostWantedNotifier
         $sourceUrls = $getPropertyValues($properties, 'sourceUrl');
 
         $lines = [];
-        $lines[] = '🔴 **' . (implode(', ', $names) ?: 'Unknown Person') . '**';
+        $lines[] = WatchlistRuntime::headerLine('🔴', implode(', ', $names) ?: 'Unknown Person');
         $lines[] = '';
 
         // Key details
@@ -122,35 +122,26 @@ final class EuropolMostWantedNotifier
 
         foreach ($detailFields as $key => $label) {
             $values = $getPropertyValues($properties, $key);
-            if ($values !== []) {
-                $display = implode(', ', $values);
-                $lines[] = "**{$label}**: " . ($key === 'nationality' ? strtoupper($display) : $display);
+            if ($values === []) {
+                continue;
             }
+
+            $display = implode(', ', $values);
+            WatchlistRuntime::appendField($lines, $label, $key === 'nationality' ? strtoupper($display) : $display);
         }
 
         $appearance = $getPropertyValues($properties, 'appearance');
-        if ($appearance !== []) {
-            $lines[] = "**Appearance**: " . implode(', ', $appearance);
-        }
+        WatchlistRuntime::appendField($lines, 'Appearance', implode(', ', $appearance), WatchlistRuntime::DISCORD_SECTION_LIMIT);
 
-        if ($notes !== []) {
+        $notesBlock = WatchlistRuntime::formatBlock(implode("\n", $notes));
+        if ($notesBlock !== '') {
             $lines[] = '';
-            $lines[] = '**Notes**: ' . implode("\n", $notes);
+            $lines[] = '**Notes**: ' . $notesBlock;
         }
 
-        // Source URLs as clickable links
-        if ($sourceUrls !== []) {
-            $lines[] = '';
-            $lines[] = '**Links**:';
-            foreach (array_slice($sourceUrls, 0, 5) as $url) {
-                $lines[] = "- <{$url}>";
-            }
-        }
+        WatchlistRuntime::appendLinkList($lines, 'Links', $sourceUrls);
 
-        $lines[] = '';
-        $lines[] = '_Europol Notification — ' . gmdate('Y-m-d H:i:s') . ' UTC_';
-
-        return WatchlistRuntime::truncate(implode("\n", $lines), WatchlistRuntime::DISCORD_CONTENT_LIMIT);
+        return WatchlistRuntime::finalizeContent($lines, 'Europol Notification');
     }
 }
 

@@ -38,7 +38,7 @@ final class DiscordVulnerabilityNotifier
                 continue;
             }
 
-            $content = $this->buildContentMessage($vulnerability);
+            $content = $this->buildContentMessage($vulnerability, $cveId);
             if (WatchlistRuntime::sendDiscordWebhook($this->webhookUrl, ['content' => $content])) {
                 $this->stateStore->add($cveId);
             }
@@ -50,81 +50,49 @@ final class DiscordVulnerabilityNotifier
     /**
      * @param array<string, mixed> $vulnerability
      */
-    private function buildContentMessage(array $vulnerability): string
+    private function buildContentMessage(array $vulnerability, string $cveId): string
     {
-        $cveId = trim((string) ($vulnerability['cveID'] ?? ''));
         $name = trim((string) ($vulnerability['vulnerabilityName'] ?? 'Unknown Vulnerability'));
-        $shortDesc = trim((string) ($vulnerability['shortDescription'] ?? ''));
 
         $nvd = $vulnerability['nvdData'] ?? [];
         $nvdData = (is_array($nvd) && isset($nvd[0]) && is_array($nvd[0])) ? $nvd[0] : null;
-
-        // Severity emoji
-        $severityTag = '';
-        if ($nvdData !== null) {
-            $severity = strtoupper((string) ($nvdData['baseSeverity'] ?? ''));
-            $severityTag = ['CRITICAL' => '🔴', 'HIGH' => '🟠', 'MEDIUM' => '🟡', 'LOW' => '🟢'][$severity] ?? '';
-        }
+        $severity = $nvdData !== null ? trim((string) ($nvdData['baseSeverity'] ?? '')) : '';
 
         $lines = [];
-        $lines[] = "{$severityTag} **{$name}**";
-        $lines[] = "**CVE**: {$cveId}";
+        $lines[] = WatchlistRuntime::headerLine(WatchlistRuntime::severityEmoji($severity), $name);
+        $lines[] = '**CVE**: ' . WatchlistRuntime::escapeMarkdown($cveId);
 
-        // NVD link
-        if ($cveId !== '') {
+        // NVD link (preview-suppressed)
+        if ($cveId !== '' && !str_contains($cveId, '>')) {
             $lines[] = "<https://nvd.nist.gov/vuln/detail/{$cveId}>";
         }
 
-        if ($shortDesc !== '') {
+        $descBlock = WatchlistRuntime::formatBlock((string) ($vulnerability['shortDescription'] ?? ''));
+        if ($descBlock !== '') {
             $lines[] = '';
-            $lines[] = WatchlistRuntime::truncate($shortDesc, 500);
+            $lines[] = $descBlock;
         }
 
         $lines[] = '';
+        WatchlistRuntime::appendField($lines, 'Date Added', (string) ($vulnerability['dateAdded'] ?? ''));
+        WatchlistRuntime::appendField($lines, 'Due Date', (string) ($vulnerability['dueDate'] ?? ''));
+        WatchlistRuntime::appendField($lines, 'Vendor/Project', (string) ($vulnerability['vendorProject'] ?? ''));
+        WatchlistRuntime::appendField($lines, 'Required Action', (string) ($vulnerability['requiredAction'] ?? ''));
 
-        $simpleFields = [
-            'dateAdded' => 'Date Added',
-            'dueDate' => 'Due Date',
-            'vendorProject' => 'Vendor/Project',
-            'requiredAction' => 'Required Action',
-        ];
-
-        foreach ($simpleFields as $key => $label) {
-            $value = trim((string) ($vulnerability[$key] ?? ''));
-            if ($value !== '') {
-                $lines[] = "**{$label}**: {$value}";
-            }
-        }
-
-        // NVD details
+        // NVD details (controlled enum values, not free text)
         if ($nvdData !== null) {
-            $lines[] = "**Score**: " . $this->formatNumberField($nvdData['baseScore'] ?? null) . " (" . trim((string) ($nvdData['baseSeverity'] ?? '')) . ")";
-            $lines[] = "**Vector**: " . trim((string) ($nvdData['attackVector'] ?? '')) . " | **Complexity**: " . trim((string) ($nvdData['attackComplexity'] ?? ''));
+            $lines[] = '**Score**: ' . $this->formatNumberField($nvdData['baseScore'] ?? null) . ' (' . $severity . ')';
+            $lines[] = '**Vector**: ' . trim((string) ($nvdData['attackVector'] ?? '')) . ' | **Complexity**: ' . trim((string) ($nvdData['attackComplexity'] ?? ''));
         }
 
-        // GitHub PoCs as clickable links
         $githubPocs = $vulnerability['githubPocs'] ?? null;
-        if (is_array($githubPocs) && $githubPocs !== []) {
-            $lines[] = '';
-            $lines[] = '**PoCs**:';
-            foreach (array_slice($githubPocs, 0, 5) as $poc) {
-                $poc = trim((string) $poc);
-                if ($poc !== '') {
-                    $lines[] = "- <{$poc}>";
-                }
-            }
+        if (is_array($githubPocs)) {
+            WatchlistRuntime::appendLinkList($lines, 'PoCs', $githubPocs);
         }
 
-        $notes = trim((string) ($vulnerability['notes'] ?? ''));
-        if ($notes !== '') {
-            $lines[] = '';
-            $lines[] = "**Notes**: {$notes}";
-        }
+        WatchlistRuntime::appendField($lines, 'Notes', (string) ($vulnerability['notes'] ?? ''), WatchlistRuntime::DISCORD_SECTION_LIMIT);
 
-        $lines[] = '';
-        $lines[] = '_Vulnerability Notification — ' . gmdate('Y-m-d H:i:s') . ' UTC_';
-
-        return WatchlistRuntime::truncate(implode("\n", $lines), WatchlistRuntime::DISCORD_CONTENT_LIMIT);
+        return WatchlistRuntime::finalizeContent($lines, 'Vulnerability Notification');
     }
 
     /**
