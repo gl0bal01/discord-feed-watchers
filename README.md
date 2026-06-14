@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/1002155255.svg)](https://doi.org/10.5281/zenodo.15722652)
+[![DOI](https://zenodo.org/badge/1002155255.svg)](https://doi.org/10.5281/zenodo.15784648)
 [![Release](https://img.shields.io/github/v/release/gl0bal01/discord-feed-watchers)](https://github.com/gl0bal01/discord-feed-watchers/releases)
 [![Security and Quality Checks](https://github.com/gl0bal01/discord-feed-watchers/actions/workflows/security-quality.yml/badge.svg)](https://github.com/gl0bal01/discord-feed-watchers/actions/workflows/security-quality.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

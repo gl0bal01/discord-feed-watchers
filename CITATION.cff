@@ -17,6 +17,6 @@ authors:
 repository-code: "https://github.com/gl0bal01/discord-feed-watchers"
 url: "https://github.com/gl0bal01/discord-feed-watchers"
 license: "MIT"
-version: "v1.0.0"
-date-released: 2025-07-01
-doi: "10.5281/zenodo.15784648"
+version: v1.1.0
+date-released: 2026-06-14
+doi: 10.5281/zenodo.15784648
