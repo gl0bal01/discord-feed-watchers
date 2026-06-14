@@ -5,9 +5,9 @@
 
 # Discord Feed Watchers
 
-This project is a collection of PHP scripts that monitor external feeds and send notifications to Discord channels via webhooks.
+This project is a collection of PHP scripts that monitor external feeds and send notifications to Discord channels as rich embeds via webhooks.
 
-Current release: [`v1.0.0`](https://github.com/gl0bal01/discord-feed-watchers/releases/tag/v1.0.0)
+Current release: [`v1.1.0`](https://github.com/gl0bal01/discord-feed-watchers/releases/tag/v1.1.0)
 
 **Tags:** `discord`, `webhooks`, `feed-monitoring`, `cve`, `ransomware`, `fbi`, `europol`, `php`, `security-alerts`
 
@@ -164,7 +164,7 @@ If you prefer file-based configuration, `src/config/config.php` also works with 
 | Ransomware | `https://api.ransomware.live/feed` (RSS; the legacy JSON `recentvictims` endpoint was retired upstream) | Third-party aggregator. RSS carries victim name, group, country, description, post link and screenshot; richer JSON fields (website, activity, infostealer) are unavailable on the free tier. |
 | Fun | uselessfacts / jokeapi / icanhazdadjoke | Third-party, low-trust (content only). |
 
-All feeds are fetched over HTTPS with TLS verification. Feed content is treated as untrusted: Discord mentions are disabled and embed thumbnail/screenshot URLs are HTTPS-validated before use.
+All feeds are fetched over HTTPS with TLS verification. Feed content is treated as untrusted: Discord mentions are disabled, field text is markdown-escaped, and embed image/screenshot URLs must be HTTPS **and** served from an allow-listed host (`images.ransomware.live` for ransomware screenshots, `fbi.gov` for FBI posters) before being embedded.
 
 ### Optional environment variables
 
@@ -177,5 +177,7 @@ All feeds are fetched over HTTPS with TLS verification. Feed content is treated 
 
 - All network calls enforce HTTPS and TLS verification.
 - Webhook payloads disable Discord mentions (`@everyone`, roles, users) by default.
+- Notifications are rendered as rich embeds; field text is markdown-escaped and links are validated.
+- Embedded images are restricted to allow-listed hosts to prevent SSRF / embed abuse.
 - Each watcher enforces a single active instance with a process lock.
 - State files are written with file locking to avoid corruption.
