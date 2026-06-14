@@ -40,7 +40,7 @@ final class FBIWantedNotifier
             }
 
             $payload = [
-                'content' => $this->buildContentMessage($item),
+                'embeds' => [$this->buildEmbed($item)],
             ];
 
             if (WatchlistRuntime::sendDiscordWebhook($this->webhookUrl, $payload)) {
@@ -51,20 +51,43 @@ final class FBIWantedNotifier
         }
     }
 
+    /** Host (and subdomains) allowed to supply poster/mugshot images. */
+    private const IMAGE_HOST_SUFFIX = 'fbi.gov';
+
     /**
      * @param array<string, mixed> $item
+     * @return array<string, mixed>
      */
-    private function buildContentMessage(array $item): string
+    private function buildEmbed(array $item): array
     {
         $title = $this->valueAsString($item['title'] ?? '') ?: 'Unknown';
-        $lines = [
-            '==============================',
-            '# ' . WatchlistRuntime::escapeMarkdown($title),
-            '==============================',
-            '',
+
+        $embed = [
+            'title' => WatchlistRuntime::truncate($title, 256),
+            'color' => WatchlistRuntime::EMBED_COLOR_DEFAULT,
         ];
 
-        $fieldsToCheck = [
+        // Clickable title → the wanted person's page.
+        $titleUrl = WatchlistRuntime::filterHttpsUrl($this->valueAsString($item['url'] ?? ''));
+        if ($titleUrl !== '') {
+            $embed['url'] = $titleUrl;
+        }
+
+        // Lead narrative becomes the embed description.
+        $description = WatchlistRuntime::formatBlock($this->valueAsString($item['description'] ?? ''));
+        if ($description !== '') {
+            $embed['description'] = $description;
+        }
+
+        // Poster image (right-side thumbnail), restricted to the FBI's own host.
+        $imageUrl = $this->safeImageUrl($item);
+        if ($imageUrl !== '') {
+            $embed['thumbnail'] = ['url' => $imageUrl];
+        }
+
+        $fields = [];
+
+        $scalarFields = [
             'publication' => 'Publication Date',
             'status' => 'Status',
             'sex' => 'Sex',
@@ -75,15 +98,15 @@ final class FBIWantedNotifier
             'poster_classification' => 'Poster Classification',
         ];
 
-        foreach ($fieldsToCheck as $key => $label) {
-            WatchlistRuntime::appendField($lines, $label, $this->valueAsString($item[$key] ?? ''));
+        foreach ($scalarFields as $key => $label) {
+            WatchlistRuntime::embedField($fields, $label, $this->valueAsString($item[$key] ?? ''));
         }
 
-        WatchlistRuntime::appendField($lines, 'Date(s) of Birth Used', $this->valueAsString($item['dates_of_birth_used'] ?? []));
+        WatchlistRuntime::embedField($fields, 'Date(s) of Birth Used', $this->valueAsString($item['dates_of_birth_used'] ?? []));
 
         $age = $this->calculateAge($item);
         if ($age !== null) {
-            $lines[] = '**Age**: ' . (string) $age;
+            WatchlistRuntime::embedField($fields, 'Age', (string) $age);
         }
 
         $optionalFields = [
@@ -95,19 +118,19 @@ final class FBIWantedNotifier
         ];
 
         foreach ($optionalFields as $key => $label) {
-            WatchlistRuntime::appendField($lines, $label, $this->valueAsString($item[$key] ?? ''));
+            WatchlistRuntime::embedField($fields, $label, $this->valueAsString($item[$key] ?? ''));
         }
 
         $heightMin = $this->valueAsString($item['height_min'] ?? '');
         $heightMax = $this->valueAsString($item['height_max'] ?? '');
         if ($heightMin !== '' && $heightMax !== '') {
-            $lines[] = sprintf('**Height**: %s - %s inches', $heightMin, $heightMax);
+            WatchlistRuntime::embedField($fields, 'Height', sprintf('%s - %s inches', $heightMin, $heightMax));
         }
 
         $weightMin = $this->valueAsString($item['weight_min'] ?? '');
         $weightMax = $this->valueAsString($item['weight_max'] ?? '');
         if ($weightMin !== '' && $weightMax !== '') {
-            $lines[] = sprintf('**Weight**: %s - %s pounds', $weightMin, $weightMax);
+            WatchlistRuntime::embedField($fields, 'Weight', sprintf('%s - %s pounds', $weightMin, $weightMax));
         }
 
         $arrayFields = [
@@ -121,34 +144,31 @@ final class FBIWantedNotifier
         ];
 
         foreach ($arrayFields as $key => $label) {
-            WatchlistRuntime::appendField($lines, $label, $this->valueAsString($item[$key] ?? []));
+            WatchlistRuntime::embedField($fields, $label, $this->valueAsString($item[$key] ?? []));
         }
 
         $rewardText = $this->valueAsString($item['reward_text'] ?? '');
         if ($rewardText !== '') {
-            $lines[] = '';
-            WatchlistRuntime::appendField($lines, 'Reward', $rewardText, WatchlistRuntime::DISCORD_SECTION_LIMIT);
+            WatchlistRuntime::embedField($fields, 'Reward', $rewardText, false, WatchlistRuntime::DISCORD_SECTION_LIMIT);
         } elseif (is_numeric($item['reward_min'] ?? null) && (float) $item['reward_min'] > 0) {
-            $lines[] = '**Reward**: $' . number_format((float) $item['reward_min'], 2, '.', ',');
+            WatchlistRuntime::embedField($fields, 'Reward', '$' . number_format((float) $item['reward_min'], 2, '.', ','));
         }
 
-        foreach (['description', 'caution', 'remarks', 'details', 'warning_message', 'publication_remarks'] as $key) {
+        // Remaining narrative blocks (description already used above).
+        foreach (['caution', 'remarks', 'details', 'warning_message', 'publication_remarks'] as $key) {
             $block = WatchlistRuntime::formatBlock($this->valueAsString($item[$key] ?? ''));
             if ($block === '') {
                 continue;
             }
 
-            $lines[] = '';
-            $lines[] = sprintf('**%s**: %s', ucwords(str_replace('_', ' ', $key)), $block);
+            WatchlistRuntime::embedField($fields, ucwords(str_replace('_', ' ', $key)), $block, false, WatchlistRuntime::DISCORD_SECTION_LIMIT);
         }
-
-        WatchlistRuntime::appendLink($lines, 'More Info', $this->valueAsString($item['url'] ?? ''));
 
         // Detail page link from the FBI feed's path (distinct from `url`).
         $path = trim((string) ($item['path'] ?? ''));
         if ($path !== '') {
             $fullPath = 'https://www.fbi.gov' . (str_starts_with($path, '/') ? $path : '/' . $path);
-            WatchlistRuntime::appendLink($lines, 'All Details', $fullPath);
+            WatchlistRuntime::embedLinkField($fields, 'All Details', $fullPath);
         }
 
         $files = $item['files'] ?? [];
@@ -160,10 +180,53 @@ final class FBIWantedNotifier
                 }
             }
 
-            WatchlistRuntime::appendLinkList($lines, 'File(s)', $fileUrls);
+            WatchlistRuntime::embedLinkListField($fields, 'File(s)', $fileUrls);
         }
 
-        return WatchlistRuntime::finalizeContent($lines, 'FBI Wanted Notification');
+        // Discord allows at most 25 fields per embed.
+        if (count($fields) > 25) {
+            $fields = array_slice($fields, 0, 25);
+        }
+
+        if ($fields !== []) {
+            $embed['fields'] = $fields;
+        }
+
+        return WatchlistRuntime::finalizeEmbed($embed, 'FBI Wanted Notification');
+    }
+
+    /**
+     * Extract a usable poster image URL from the feed, accepting only HTTPS URLs
+     * served from the FBI's own domain.
+     *
+     * @param array<string, mixed> $item
+     */
+    private function safeImageUrl(array $item): string
+    {
+        $images = $item['images'] ?? [];
+        if (!is_array($images)) {
+            return '';
+        }
+
+        foreach ($images as $image) {
+            if (!is_array($image)) {
+                continue;
+            }
+
+            foreach (['large', 'original', 'thumb'] as $sizeKey) {
+                $url = WatchlistRuntime::filterHttpsUrl((string) ($image[$sizeKey] ?? ''));
+                if ($url === '') {
+                    continue;
+                }
+
+                $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+                if ($host === self::IMAGE_HOST_SUFFIX || str_ends_with($host, '.' . self::IMAGE_HOST_SUFFIX)) {
+                    return $url;
+                }
+            }
+        }
+
+        return '';
     }
 
     /**

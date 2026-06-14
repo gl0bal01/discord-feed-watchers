@@ -48,8 +48,8 @@ final class EuropolMostWantedNotifier
                     continue;
                 }
 
-                $content = $this->buildContentMessage($entity);
-                if (WatchlistRuntime::sendDiscordWebhook($this->webhookUrl, ['content' => $content])) {
+                $embed = $this->buildEmbed($entity);
+                if (WatchlistRuntime::sendDiscordWebhook($this->webhookUrl, ['embeds' => [$embed]])) {
                     $this->stateStore->add($personId);
                 }
 
@@ -84,8 +84,9 @@ final class EuropolMostWantedNotifier
 
     /**
      * @param array<string, mixed> $entity
+     * @return array<string, mixed>
      */
-    private function buildContentMessage(array $entity): string
+    private function buildEmbed(array $entity): array
     {
         $properties = $entity['properties'] ?? [];
         if (!is_array($properties)) {
@@ -106,10 +107,15 @@ final class EuropolMostWantedNotifier
         $names = $getPropertyValues($properties, 'name');
         $notes = $getPropertyValues($properties, 'notes');
         $sourceUrls = $getPropertyValues($properties, 'sourceUrl');
+        $fullName = implode(', ', $names) ?: 'Unknown Person';
 
-        $lines = [];
-        $lines[] = WatchlistRuntime::headerLine('🔴', implode(', ', $names) ?: 'Unknown Person');
-        $lines[] = '';
+        $embed = [
+            'title' => WatchlistRuntime::truncate($fullName, 256),
+            'color' => WatchlistRuntime::EMBED_COLOR_DEFAULT,
+        ];
+
+        $fields = [];
+        WatchlistRuntime::embedField($fields, 'Name', $fullName);
 
         // Key details
         $detailFields = [
@@ -127,21 +133,24 @@ final class EuropolMostWantedNotifier
             }
 
             $display = implode(', ', $values);
-            WatchlistRuntime::appendField($lines, $label, $key === 'nationality' ? strtoupper($display) : $display);
+            WatchlistRuntime::embedField($fields, $label, $key === 'nationality' ? strtoupper($display) : $display);
         }
 
         $appearance = $getPropertyValues($properties, 'appearance');
-        WatchlistRuntime::appendField($lines, 'Appearance', implode(', ', $appearance), WatchlistRuntime::DISCORD_SECTION_LIMIT);
+        WatchlistRuntime::embedField($fields, 'Appearance', implode(', ', $appearance), false, WatchlistRuntime::DISCORD_SECTION_LIMIT);
 
-        $notesBlock = WatchlistRuntime::formatBlock(implode("\n", $notes));
-        if ($notesBlock !== '') {
-            $lines[] = '';
-            $lines[] = '**Notes**: ' . $notesBlock;
+        $notesText = trim(implode("\n", $notes));
+        if ($notesText !== '') {
+            WatchlistRuntime::embedField($fields, 'Notes', $notesText, false, WatchlistRuntime::DISCORD_SECTION_LIMIT);
         }
 
-        WatchlistRuntime::appendLinkList($lines, 'Links', $sourceUrls);
+        WatchlistRuntime::embedLinkListField($fields, 'Photos & More', $sourceUrls);
 
-        return WatchlistRuntime::finalizeContent($lines, 'Europol Notification');
+        if ($fields !== []) {
+            $embed['fields'] = $fields;
+        }
+
+        return WatchlistRuntime::finalizeEmbed($embed, 'Europol Notification');
     }
 }
 

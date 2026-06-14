@@ -305,6 +305,111 @@ final class WatchlistRuntime
         return ['CRITICAL' => '🔴', 'HIGH' => '🟠', 'MEDIUM' => '🟡', 'LOW' => '🟢'][strtoupper(trim($severity))] ?? '';
     }
 
+    /** Default embed accent color (neutral red) used when no severity applies. */
+    public const EMBED_COLOR_DEFAULT = 0xE74C3C;
+
+    /** Maximum characters Discord allows in a single embed field value. */
+    public const EMBED_FIELD_LIMIT = 1024;
+
+    /** Maximum characters Discord allows in an embed description. */
+    public const EMBED_DESCRIPTION_LIMIT = 4096;
+
+    /**
+     * Severity → embed accent color. Falls back to the default red.
+     */
+    public static function severityColor(string $severity): int
+    {
+        return [
+            'CRITICAL' => 0xE74C3C, // red
+            'HIGH' => 0xE67E22,     // orange
+            'MEDIUM' => 0xF1C40F,   // yellow
+            'LOW' => 0x2ECC71,      // green
+        ][strtoupper(trim($severity))] ?? self::EMBED_COLOR_DEFAULT;
+    }
+
+    /**
+     * Append a key/value embed field, skipping empty and N/A-style values and
+     * markdown-escaping the value so feed text can't corrupt formatting.
+     *
+     * @param array<int, array<string, mixed>> $fields
+     */
+    public static function embedField(array &$fields, string $name, string $value, bool $inline = true, int $limit = self::EMBED_FIELD_LIMIT): void
+    {
+        $value = trim($value);
+        $upper = strtoupper($value);
+        if ($value === '' || $upper === 'N/A' || $upper === 'NA') {
+            return;
+        }
+
+        $fields[] = [
+            'name' => $name,
+            'value' => self::escapeMarkdown(self::truncate($value, $limit)),
+            'inline' => $inline,
+        ];
+    }
+
+    /**
+     * Append an embed field whose value is a validated link. Dropped when the URL
+     * is unusable. Links render clickable inside embed field values.
+     *
+     * @param array<int, array<string, mixed>> $fields
+     */
+    public static function embedLinkField(array &$fields, string $name, string $url, bool $inline = false, bool $httpsOnly = true): void
+    {
+        $url = self::sanitizeLinkUrl($url, $httpsOnly);
+        if ($url === '') {
+            return;
+        }
+
+        $fields[] = ['name' => $name, 'value' => $url, 'inline' => $inline];
+    }
+
+    /**
+     * Append an embed field listing several validated links (one per line), capped
+     * at MAX_LINKS_PER_SECTION and the field length limit. Emits nothing when no
+     * URL survives validation.
+     *
+     * @param array<int, array<string, mixed>> $fields
+     * @param array<int, mixed> $urls
+     */
+    public static function embedLinkListField(array &$fields, string $name, array $urls, bool $httpsOnly = true): void
+    {
+        $rendered = [];
+        foreach ($urls as $url) {
+            $clean = self::sanitizeLinkUrl((string) $url, $httpsOnly);
+            if ($clean === '') {
+                continue;
+            }
+
+            $rendered[] = $clean;
+            if (count($rendered) >= self::MAX_LINKS_PER_SECTION) {
+                break;
+            }
+        }
+
+        if ($rendered === []) {
+            return;
+        }
+
+        $value = self::truncate(implode("\n", $rendered), self::EMBED_FIELD_LIMIT);
+        $fields[] = ['name' => $name, 'value' => $value, 'inline' => false];
+    }
+
+    /**
+     * Assemble a Discord embed, applying the standard footer and a UTC timestamp.
+     * Drops empty trailing structures so Discord renders a clean card.
+     *
+     * @param array<string, mixed> $embed
+     * @return array<string, mixed>
+     */
+    public static function finalizeEmbed(array $embed, string $footerLabel): array
+    {
+        $embed['footer'] = ['text' => $footerLabel];
+        $embed['timestamp'] = gmdate('c');
+
+        return $embed;
+    }
+
     /**
      * Build a "{emoji} **title**" header line, escaping the title and avoiding a
      * leading space when no emoji is supplied.
