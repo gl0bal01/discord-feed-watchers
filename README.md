@@ -161,7 +161,7 @@ If you prefer file-based configuration, `src/config/config.php` also works with 
 | CVE | `https://kevin.gtfkd.com/kev` (default) — community proxy enriching the CISA KEV catalog with NVD scores and PoC links | Third-party. For an authoritative, un-enriched source set `CVE_FEED_URL` to CISA's official KEV JSON (`https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json`); NVD-score colouring and PoC fields are then omitted. |
 | Europol | OpenSanctions `eu_europol_wanted` dataset | Official OpenSanctions mirror. |
 | FBI | `https://api.fbi.gov/@wanted` | Official FBI API. |
-| Ransomware | `https://api.ransomware.live/recentvictims` | Third-party aggregator. |
+| Ransomware | `https://api.ransomware.live/feed` (RSS; the legacy JSON `recentvictims` endpoint was retired upstream) | Third-party aggregator. RSS carries victim name, group, country, description, post link and screenshot; richer JSON fields (website, activity, infostealer) are unavailable on the free tier. |
 | Fun | uselessfacts / jokeapi / icanhazdadjoke | Third-party, low-trust (content only). |
 
 All feeds are fetched over HTTPS with TLS verification. Feed content is treated as untrusted: Discord mentions are disabled and embed thumbnail/screenshot URLs are HTTPS-validated before use.

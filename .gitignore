@@ -13,6 +13,7 @@ fbi/uids
 fbi/processed_fbi_uids.txt
 ransomware/processed_ransomware_victims.txt
 ransomware/recentvictims.json
+ransomware/recentfeed.xml
 
 # Logs
 *.log

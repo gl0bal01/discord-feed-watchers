@@ -100,6 +100,21 @@ final class WatchlistRuntime
         return $decoded;
     }
 
+    /**
+     * Fetch a URL and return the raw response body (e.g. RSS/XML feeds).
+     */
+    public static function fetchText(string $url, string $accept = 'application/xml, text/xml, */*'): string
+    {
+        self::assertHttpsUrl($url, 'fetch URL');
+        $response = self::httpRequest('GET', $url, ['Accept: ' . $accept]);
+
+        if (!is_string($response['body']) || trim($response['body']) === '') {
+            throw new RuntimeException(sprintf('Empty response body received from %s.', $url));
+        }
+
+        return $response['body'];
+    }
+
     public static function downloadFile(string $url, string $destinationPath): void
     {
         self::assertHttpsUrl($url, 'download URL');
